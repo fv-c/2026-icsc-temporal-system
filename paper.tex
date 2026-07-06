@@ -21,7 +21,7 @@
 
 \mainmatter
 
-\title{One Timeline, Many Renderings:\\ A Wolfram Language Paclet with Csound\\ as Reference Renderer}
+\title{One Timeline, Many Renderings:\\ A Wolfram Language Paclet\\ for Heterogeneous Musical Output}
 
 \titlerunning{One Timeline, Many Renderings}
 
@@ -45,7 +45,8 @@ musical entities, placed on a rational beat timeline, is compiled by
 per-backend renderers into Csound, MusicXML, and OSC artifacts. The paper
 describes the problem and the design decisions behind the paclet, its anatomy
 (temporal, semantic, and rendering layers across fourteen modules), and the
-implemented renderers. Csound is examined as the reference renderer: compiled
+implemented renderers. Particular attention goes to the Csound renderer,
+today the paclet's most complete backend: compiled
 tempo maps produce onset and duration seconds only at render time, session
 tuning produces p4 frequencies, and orchestras remain ordinary \texttt{.orc}
 files addressed by stable named instruments, continuing the score--orchestra
@@ -61,20 +62,20 @@ Language, click track}
 
 \section{Introduction}
 
-The two figures honored by this conference frame the problem of this paper.
-Koenig's composition programs \emph{Project~1} and \emph{Project~2} computed
-the structure of a piece as tables that still had to be realized elsewhere,
-by instrumentalists or by a synthesis system \cite{koenig}, and his late
-electronic works brought that practice to Csound itself. Tenney, at Bell
-Labs, wrote note-list generators whose output was played by the
-\textsc{music~n} programs \cite{tenney,mathews}. In both cases the
-compositional program owns \emph{time and structure}, while a separate stage
-owns \emph{sound}. Csound preserves this division to this day as the
-orchestra--score split \cite{csoundbook}.
+Long before rendering became plural, computing composers had already
+separated structure from sound. At Bell Labs, James Tenney generated note
+lists for the \textsc{music~n} programs to play \cite{tenney,mathews}; in
+Utrecht, Gottfried Michael Koenig's \emph{Project~1} and \emph{Project~2}
+computed a piece as tables whose realization belonged to a later
+stage---players, the studio and, in his last electronic works, Csound
+itself \cite{koenig}. In both practices the program owns \emph{time and
+structure} while a separate system owns \emph{sound}: the division Csound
+institutionalizes as the orchestra--score split \cite{csoundbook}.
 
 Contemporary practice multiplies the realization stages. A mixed work may
-need a \texttt{.csd} for synthesis, MusicXML for engraving, a timed event
-stream for Max/MSP, and a click track for the performers. These formats
+need a \texttt{.csd} for synthesis, MusicXML for engraving, a timed control
+stream for the live-electronics layer, and a click track for the
+performers. These formats
 encode time differently---seconds, divisions per quarter, milliseconds,
 audio samples---so maintaining them by hand means maintaining four diverging
 timelines. Computer-assisted composition environments have long addressed
@@ -123,7 +124,7 @@ graphics). All functions are pure; store operations return new stores.
 \node[backend, below=6mm of l3.south, xshift=12.5mm] (mx)
   {MusicXML\\[-1pt] {\scriptsize\texttt{.musicxml}}};
 \node[backend, below=6mm of l3.south, xshift=37.5mm] (osc)
-  {OSC/Max\\[-1pt] {\scriptsize\texttt{.json}}};
+  {OSC events\\[-1pt] {\scriptsize\texttt{.json}}};
 \draw[arrow] (l1) -- (l2);
 \draw[arrow] (l2) -- (l3);
 \foreach \b in {cs,ck,mx,osc} {\draw[arrow] (l3.south) -- (\b.north);}
@@ -193,17 +194,18 @@ splits notes at barlines into tied fragments, and validates measure
 capacity, part coverage, and tie and chord integrity; it is explicitly a
 lossy projection with a declared coverage profile \cite{good}, currently in
 beta and visually validated against a commercial engraving application.
-\emph{OSC} emits a JSON event list in milliseconds---curves sampled at a
-configurable control rate---consumed by a Max/MSP scheduler
-\cite{osc}. Not every entity exists everywhere: curves become Csound
-f-tables but have no notation image; spelling matters to MusicXML and not to
-synthesis. The paclet records these fidelity differences per entity--backend
+\emph{OSC} emits a schedule-ready JSON event list in milliseconds---curves
+sampled at a configurable control rate---for dispatch as OSC messages
+\cite{osc} to whatever is listening: a graphical patcher as readily as a
+running Csound instance through its OSC opcodes. Not every entity exists
+everywhere: curves become Csound f-tables but have no notation image;
+spelling matters to MusicXML and not to synthesis. The paclet records these fidelity differences per entity--backend
 pair instead of pretending projections are lossless.
 
-\section{Csound as Reference Renderer}\label{sec:csound}
+\section{The Csound Renderer}\label{sec:csound}
 
-Csound is the oldest and most complete backend, and the one that fixes the
-paclet's rendering idiom (Fig.~\ref{fig:pipeline}). Its p-field convention
+Csound is the oldest and most complete backend, and the one that currently
+fixes the paclet's rendering idiom (Fig.~\ref{fig:pipeline}). Its p-field convention
 is stable: \texttt{p1} instrument, \texttt{p2} onset seconds, \texttt{p3}
 duration seconds, \texttt{p4} frequency in Hz, \texttt{p5} amplitude in
 $[0,1]$, \texttt{p6}+ passed through from the entity's
@@ -322,7 +324,8 @@ demonstration that a new projection costs one contract.
 Temporal System contributes an architecture, not a synthesis method: an
 immutable rational-beat store from which Csound scores, click tracks,
 notation, and real-time event streams are compiled as unequal but
-coordinated projections. Csound serves as the reference renderer because it
+coordinated projections. Csound currently plays the part of reference
+renderer because it
 makes the contract concrete---late conversion of time, pitch, and dynamics;
 stable named instruments; orchestras kept as Csound code. Current work
 includes stabilizing the MusicXML backend beyond beta and a hierarchical
