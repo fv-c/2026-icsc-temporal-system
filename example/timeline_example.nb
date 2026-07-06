@@ -3,32 +3,39 @@ Notebook[{
 Cell["One Timeline, Many Renderings \[LongDash] Worked Example", "Title"],
 
 Cell["\<This notebook rebuilds, from temporal-system itself, the material \
-shown in the ICSC 2026 paper: the timeline figure (Fig. 2), the Csound \
-rendering of the same stemData (timeline_example.csd + .wav), and the \
-click-track companion quoted in Sect. 5 (click_track.csd + .wav). It needs a \
-local checkout of temporal-system; compiling audio additionally needs a \
-Csound binary. Evaluate the cells in order.\>", "Text"],
+shown in the ICSC 2026 paper. The main example is the most complex fixture \
+of the paclet's Csound test suite (tests/test_csound.nb, Test 7): two \
+instruments, four meter signatures, four triggers and six curves whose \
+p-field bindings compose. It produces the timeline figure (Fig. 2), the \
+Csound rendering (timeline_example.csd + .wav), its click track \
+(timeline_example_click.csd + .wav), and the two minimal snippets quoted \
+verbatim in the paper. It needs a local checkout of temporal-system; \
+compiling audio additionally needs a Csound binary. Evaluate the cells in \
+order.\>", "Text"],
 
 Cell["1. Load temporal-system", "Section"],
 
 Cell["$temporalSystemRoot = \"/Users/master/Documents/GitHub/temporal-system\";\nSetDirectory[$temporalSystemRoot];\nGet[FileNameJoin[{$temporalSystemRoot, #}]] & /@ {\n    \"core/entities.wl\", \"core/stemData.wl\", \"core/tempoMap.wl\",\n    \"core/session.wl\", \"util/pitch.wl\", \"util/dynamics.wl\",\n    \"util/timeline.wl\", \"rendering/renderer.wl\",\n    \"rendering/csound.wl\", \"rendering/click.wl\"};", "Input"],
 
-Cell["2. The stemData behind the timeline", "Section"],
+Cell["2. Session: curve bindings and click grid", "Section"],
 
-Cell["\<A rising segment of the harmonic series \[LongDash] harmonics 2\[Dash]9 \
-of A2 \[LongDash] written as tempered spellings with cent offsets, on one \
-sine_osc lane; plus an amplitude curve, a trigger, two section markers, and \
-a 4/4 \[Rule] 3/4 meter change. Onsets and durations use the paclet's \
-whole-note beat space: one 4/4 bar = 1, a quarter = 1/4.\>", "Text"],
+Cell["\<Four curve parameters are declared. amplitude and ampScale both \
+bind to p5 in multiply mode, so the renderer composes p5 * amplitude * \
+ampScale; panSweep binds to p6 in replace mode and panDepth in multiply \
+mode, composing panSweep * panDepth. The click grid is set to eighth notes. \
+Onsets and durations use the paclet's whole-note beat space: one 4/4 bar = \
+1, a quarter = 1/4.\>", "Text"],
 
-Cell["sd = TemporalSystem`StemData`emptyStemData[];\nadd[e_] := (sd = TemporalSystem`StemData`addEntity[sd, e];\n   If[sd === $Failed, Print[\"addEntity failed: \", e]]);\n\nadd[TemporalSystem`Entities`makeMeter[\"m1\", 0, 4, 4]];\nadd[TemporalSystem`Entities`makeMeter[\"m2\", 2, 3, 4]];\n\nmkNote[id_, onset_, pitch_, dur_, dyn_] := TemporalSystem`Entities`makeNote[\n   id, onset, pitch, dur, dyn,\n   \"rendering\" -> <|\n     \"csound\" -> <|\"instrument\" -> \"sine_osc\"|>,\n     \"musicxml\" -> <|\"instrument\" -> \"sine_osc\"|>\n   |>\n];\n\nadd[mkNote[\"n1\", 0, {\"A3\", 0}, 1/4, \"p\"]];\nadd[mkNote[\"n2\", 1/4, {\"E4\", 2}, 1/4, \"p\"]];\nadd[mkNote[\"n3\", 1/2, {\"A4\", 0}, 1/4, \"mp\"]];\nadd[mkNote[\"n4\", 3/4, {\"C#5\", -14}, 1/4, \"mp\"]];\nadd[mkNote[\"n5\", 1, {\"E5\", 2}, 1/2, \"mf\"]];\nadd[mkNote[\"n6\", 3/2, {\"G5\", -31}, 1/2, \"mf\"]];\nadd[mkNote[\"n7\", 2, {\"A5\", 0}, 3/4, \"f\"]];\nadd[mkNote[\"n8\", 11/4, {\"B5\", 4}, 3/4, \"f\"]];\n\nadd[TemporalSystem`Entities`makeCurve[\"c1\", 0, \"amplitude\", 2,\n   {\"linear\", {{0, 0.15}, {1, 0.9}, {2, 0.3}}}]];\nadd[TemporalSystem`Entities`makeTrigger[\"t1\", 1, \"reverb\", \"enable\", {0.35}]];\nadd[TemporalSystem`Entities`makeMarker[\"mk1\", 0, \"A\"]];\nadd[TemporalSystem`Entities`makeMarker[\"mk2\", 2, \"B\"]];\n\nTemporalSystem`StemData`stemDataSize[sd]", "Input"],
+Cell["csoundBinary = SelectFirst[\n   {\"/usr/local/bin/csound\", \"/opt/homebrew/bin/csound\"},\n   FileExistsQ, \"csound\"];\n\ncfg = TemporalSystem`Session`makeSessionConfig[\n   \"csoundCurveBindings\" -> <|\n     \"amplitude\" -> <|\"pfield\" -> \"p5\", \"mode\" -> \"multiply\"|>,\n     \"ampScale\"  -> <|\"pfield\" -> \"p5\", \"mode\" -> \"multiply\"|>,\n     \"panSweep\"  -> <|\"pfield\" -> \"p6\", \"mode\" -> \"replace\"|>,\n     \"panDepth\"  -> <|\"pfield\" -> \"p6\", \"mode\" -> \"multiply\"|>\n   |>,\n   \"clickBeatUnit\" -> 1/8,\n   \"clickDuration\" -> 1/32,\n   \"sampleRate\" -> 44100,\n   \"instrumentsDir\" -> FileNameJoin[{$temporalSystemRoot, \"instruments\"}],\n   \"csoundBinary\" -> csoundBinary,\n   \"csoundCompileOnExport\" -> True\n];\nregistry = TemporalSystem`Session`loadOrchRegistry[cfg];\ntempo = TemporalSystem`TempoMap`makeTempoSpec[{{0, 96.}}];", "Input"],
 
-Cell["3. Tempo", "Section"],
+Cell["3. The stemData behind the timeline", "Section"],
 
-Cell["\<120 BPM on the quarter, authored as a tempoSpec and compiled \
-on demand: one whole-note beat lasts 2 s, a quarter 0.5 s.\>", "Text"],
+Cell["\<Sixteen sine_osc notes (several with cent offsets) over eight click \
+hits, four accent triggers on both instruments, six curves, labeled section \
+markers, and a 4/4 \[Rule] 5/8 \[Rule] 7/8 \[Rule] 3/4 meter grid \[LongDash] \
+13/2 whole-note beats at 96 BPM.\>", "Text"],
 
-Cell["tempo = TemporalSystem`TempoMap`makeTempoSpec[{{0, 120.}}]", "Input"],
+Cell["sd = TemporalSystem`StemData`emptyStemData[];\nadd[e_] := (sd = TemporalSystem`StemData`addEntity[sd, e];\n   If[sd === $Failed, Print[\"addEntity failed: \", e]]);\nmkNote[id_, onset_, pitch_, dur_, dyn_, csound_] :=\n   TemporalSystem`Entities`makeNote[id, onset, pitch, dur, dyn,\n     \"rendering\" -> <|\"csound\" -> csound|>];\n\nadd[TemporalSystem`Entities`makeMeter[\"m1\", 0, 4, 4]];\nadd[TemporalSystem`Entities`makeMeter[\"m2\", 2, 5, 8]];\nadd[TemporalSystem`Entities`makeMeter[\"m3\", 13/4, 7, 8]];\nadd[TemporalSystem`Entities`makeMeter[\"m4\", 5, 3, 4]];\nadd[TemporalSystem`Entities`makeMarker[\"mkIntro\", 0, \"4-4 opening\"]];\nadd[TemporalSystem`Entities`makeMarker[\"mkFive\", 2, \"5-8 rotation\"]];\nadd[TemporalSystem`Entities`makeMarker[\"mkSeven\", 13/4, \"7-8 expansion\"]];\nadd[TemporalSystem`Entities`makeMarker[\"mkCoda\", 5, \"3-4 coda\"]];\n\nadd[mkNote[\"lead1\", 0, {\"A4\", 0}, 1/4, \"mp\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.15, \"p7\" -> 0.20|>]];\nadd[mkNote[\"lead2\", 1/8, {\"C5\", 0}, 3/8, \"mf\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.35, \"p7\" -> 0.45|>]];\nadd[mkNote[\"lead3\", 1/2, {\"E5\", 25}, 1/4, \"f\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.80, \"p7\" -> 0.30|>]];\nadd[mkNote[\"lead4\", 3/4, {\"G4\", -12}, 1/2, \"p\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.20, \"p7\" -> 0.65|>]];\nadd[mkNote[\"lead5\", 5/4, {\"B4\", 0}, 3/8, \"mf\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.55, \"p7\" -> 0.25|>]];\nadd[mkNote[\"lead6\", 13/8, {\"D5\", 0}, 1/4, \"f\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.75, \"p7\" -> 0.35|>]];\nadd[mkNote[\"lead7\", 2, {\"F5\", -20}, 5/16, \"mp\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.10, \"p7\" -> 0.50|>]];\nadd[mkNote[\"lead8\", 37/16, {\"A5\", 0}, 5/16, \"mf\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.35, \"p7\" -> 0.40|>]];\nadd[mkNote[\"lead9\", 21/8, {\"C6\", 15}, 5/16, \"f\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.65, \"p7\" -> 0.30|>]];\nadd[mkNote[\"lead10\", 47/16, {\"E5\", 0}, 1/4, \"p\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.85, \"p7\" -> 0.70|>]];\nadd[mkNote[\"lead11\", 13/4, {\"G5\", 0}, 7/16, \"mf\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.25, \"p7\" -> 0.45|>]];\nadd[mkNote[\"lead12\", 59/16, {\"B5\", -10}, 7/16, \"f\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.60, \"p7\" -> 0.25|>]];\nadd[mkNote[\"lead13\", 33/8, {\"D6\", 0}, 1/2, \"mp\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.90, \"p7\" -> 0.55|>]];\nadd[mkNote[\"lead14\", 37/8, {\"F5\", 0}, 3/8, \"mf\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.40, \"p7\" -> 0.35|>]];\nadd[mkNote[\"lead15\", 5, {\"A4\", 0}, 3/4, \"f\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.20, \"p7\" -> 0.60|>]];\nadd[mkNote[\"lead16\", 23/4, {\"E5\", 25}, 3/4, \"mp\", <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.80, \"p7\" -> 0.20|>]];\n\nadd[mkNote[\"perc1\", 0, {\"C6\", 0}, 1/16, \"mf\", <|\"instrument\" -> \"click\"|>]];\nadd[mkNote[\"perc2\", 1/2, {\"G5\", 0}, 1/16, \"f\", <|\"instrument\" -> \"click\"|>]];\nadd[mkNote[\"perc3\", 1, {\"C6\", 0}, 1/16, \"mp\", <|\"instrument\" -> \"click\"|>]];\nadd[mkNote[\"perc4\", 3/2, {\"G5\", 0}, 1/16, \"f\", <|\"instrument\" -> \"click\"|>]];\nadd[mkNote[\"perc5\", 2, {\"C6\", 0}, 1/16, \"mf\", <|\"instrument\" -> \"click\"|>]];\nadd[mkNote[\"perc6\", 21/8, {\"G5\", 0}, 1/16, \"f\", <|\"instrument\" -> \"click\"|>]];\nadd[mkNote[\"perc7\", 13/4, {\"C6\", 0}, 1/16, \"mf\", <|\"instrument\" -> \"click\"|>]];\nadd[mkNote[\"perc8\", 5, {\"G5\", 0}, 1/16, \"f\", <|\"instrument\" -> \"click\"|>]];\n\nadd[TemporalSystem`Entities`makeTrigger[\"trClick\", 1/4, \"click\", \"accent\", {1760., 0.70}]];\nadd[TemporalSystem`Entities`makeTrigger[\"trClick2\", 9/4, \"click\", \"accent\", {1320., 0.55}]];\nadd[TemporalSystem`Entities`makeTrigger[\"trLead\", 5/4, \"sine_osc\", \"accent\", {660., 0.25, 0.75, 0.20}]];\nadd[TemporalSystem`Entities`makeTrigger[\"trLead2\", 21/4, \"sine_osc\", \"accent\", {990., 0.18, 0.25, 0.70}]];\n\nadd[TemporalSystem`Entities`makeCurve[\"ampA\", 0, \"amplitude\", 13/4,\n   {\"linear\", {{0, 0.}, {1, 0.95}, {2, 0.65}, {13/4, 0.85}}}]];\nadd[TemporalSystem`Entities`makeCurve[\"ampB\", 13/4, \"amplitude\", 13/4,\n   {\"linear\", {{0, 0.85}, {7/8, 0.35}, {7/4, 0.95}, {13/4, 0.55}}}]];\nadd[TemporalSystem`Entities`makeCurve[\"ampScale\", 0, \"ampScale\", 13/2,\n   {\"linear\", {{0, 0.70}, {13/4, 1.00}, {13/2, 0.60}}}]];\nadd[TemporalSystem`Entities`makeCurve[\"panA\", 0, \"panSweep\", 13/4,\n   {\"linear\", {{0, 0.05}, {1, 0.95}, {2, 0.35}, {13/4, 0.75}}}]];\nadd[TemporalSystem`Entities`makeCurve[\"panB\", 13/4, \"panSweep\", 13/4,\n   {\"linear\", {{0, 0.75}, {7/8, 0.20}, {7/4, 0.90}, {13/4, 0.45}}}]];\nadd[TemporalSystem`Entities`makeCurve[\"panDepth\", 0, \"panDepth\", 13/2,\n   {\"linear\", {{0, 1.00}, {13/4, 0.45}, {13/2, 0.85}}}]];\n\nTemporalSystem`StemData`stemDataSize[sd]", "Input"],
 
 Cell["4. The timeline", "Section"],
 
@@ -40,29 +47,31 @@ Cell["figDir = FileNameJoin[{ParentDirectory[NotebookDirectory[]], \"figures\"}]
 
 Cell["5. Csound rendering and audio", "Section"],
 
-Cell["\<renderCSnd projects the whole store at once. The amplitude curve \
-becomes a k-rate control signal (global variable + generated driver \
-instrument) and, through the session's default curve binding, multiplies p5 \
-inside a generated bound copy of sine_osc \[LongDash] the source .orc is \
-never modified. The markers become onset-ordered score comments. The \
-trigger's target (\"reverb\") is not in the orchestra registry, so the \
-Csound projection warns and skips it: fallback policies are per backend. \
-With csoundCompileOnExport -> True the paclet writes the .csd and calls \
-Csound to compile the .wav in one step.\>", "Text"],
+Cell["\<renderCSnd projects the whole store at once. Each curve becomes a \
+k-rate control signal (global variable + generated driver instrument); the \
+declared bindings compose them onto p5 and p6 inside generated bound copies \
+of sine_osc and click \[LongDash] the source .orc files are never modified. \
+Markers become onset-ordered score comments and triggers become real score \
+events on the bound instruments. With csoundCompileOnExport -> True the \
+paclet writes the .csd and calls Csound to compile the .wav in one \
+step.\>", "Text"],
 
-Cell["csoundBinary = SelectFirst[\n   {\"/usr/local/bin/csound\", \"/opt/homebrew/bin/csound\"},\n   FileExistsQ, \"csound\"];\n\nconfig = TemporalSystem`Session`makeSessionConfig[\n   \"sampleRate\" -> 44100,\n   \"instrumentsDir\" -> FileNameJoin[{$temporalSystemRoot, \"instruments\"}],\n   \"csoundBinary\" -> csoundBinary,\n   \"csoundCompileOnExport\" -> True\n];\nregistry = TemporalSystem`Session`loadOrchRegistry[config];\n\nprims = TemporalSystem`Csound`renderCSnd[sd, tempo, registry, config];\n\nTemporalSystem`Csound`serializeCSnd[prims, config, registry,\n  FileNameJoin[{NotebookDirectory[], \"timeline_example.csd\"}]]", "Input"],
+Cell["prims = TemporalSystem`Csound`renderCSnd[sd, tempo, registry, cfg];\n\nTemporalSystem`Csound`serializeCSnd[prims, cfg, registry,\n  FileNameJoin[{NotebookDirectory[], \"timeline_example.csd\"}]]", "Input"],
 
-Cell["6. Click-track companion", "Section"],
+Cell["6. The click track of the same timeline", "Section"],
 
-Cell["\<Two 4/4 bars at 120 BPM. The click renderer walks the measure grid \
-built from the meter entities and accents each downbeat; the same serializer \
-then writes the .csd and compiles the .wav.\>", "Text"],
+Cell["\<An eighth-note click over the 4/4, 5/8, 7/8, 3/4 meter sequence, \
+with each downbeat accented \[LongDash] derived from the same meter \
+entities and tempo map as everything else.\>", "Text"],
 
-Cell["sdClick = TemporalSystem`StemData`emptyStemData[];\nsdClick = TemporalSystem`StemData`addEntity[sdClick,\n   TemporalSystem`Entities`makeMeter[\"m1\", 0, 4, 4]];\nsdClick = TemporalSystem`StemData`addEntity[sdClick,\n   TemporalSystem`Entities`makeNote[\"n1\", 0, {\"A4\", 0}, 2, \"mf\",\n     \"rendering\" -> <|\"csound\" -> <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.5|>|>]];\ntempoClick = TemporalSystem`TempoMap`makeTempoSpec[{{0, 120.}}];\n\nclickPrims = TemporalSystem`Click`renderClickTrack[\n   sdClick, tempoClick, registry, config];\nTemporalSystem`Click`serializeClickCSnd[clickPrims, config, registry,\n  FileNameJoin[{NotebookDirectory[], \"click_track.csd\"}]]", "Input"],
+Cell["clickRegistry = KeyTake[registry, {\"click\"}];\nclickPrims = TemporalSystem`Click`renderClickTrack[sd, tempo, clickRegistry, cfg];\nTemporalSystem`Click`serializeClickCSnd[clickPrims, cfg, clickRegistry,\n  FileNameJoin[{NotebookDirectory[], \"timeline_example_click.csd\"}]]", "Input"],
 
-Cell["\<The one-note Csound rendering quoted in Sect. 4 of the paper comes \
-from the same store through the generic dispatcher.\>", "Text"],
+Cell["7. The minimal snippets quoted in the paper", "Section"],
 
-Cell["notesCsd = TemporalSystem`Renderer`renderTo[\n   sdClick, tempoClick, TemporalSystem`Csound`csoundBackend,\n   Join[config, <|\"csoundCompileOnExport\" -> False|>], registry];\nExport[FileNameJoin[{NotebookDirectory[], \"notes.csd\"}], notesCsd, \"Text\"];\nSelect[StringSplit[notesCsd, \"\\n\"], StringStartsQ[#, \"i \"] &]", "Input"]
+Cell["\<Sect. 4 quotes the i-statement of a single A4 note; Sect. 5 quotes \
+the click score of two 4/4 bars at 120 BPM. Both come from the same \
+pipeline with default session settings.\>", "Text"],
+
+Cell["paperCfg = TemporalSystem`Session`makeSessionConfig[\n   \"sampleRate\" -> 44100,\n   \"instrumentsDir\" -> FileNameJoin[{$temporalSystemRoot, \"instruments\"}]\n];\nsdPaper = TemporalSystem`StemData`emptyStemData[];\nsdPaper = TemporalSystem`StemData`addEntity[sdPaper,\n   TemporalSystem`Entities`makeMeter[\"m1\", 0, 4, 4]];\nsdPaper = TemporalSystem`StemData`addEntity[sdPaper,\n   TemporalSystem`Entities`makeNote[\"n1\", 0, {\"A4\", 0}, 2, \"mf\",\n     \"rendering\" -> <|\"csound\" -> <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.5|>|>]];\ntempoPaper = TemporalSystem`TempoMap`makeTempoSpec[{{0, 120.}}];\n\npaperClick = TemporalSystem`Renderer`renderTo[\n   sdPaper, tempoPaper, TemporalSystem`Click`clickBackend, paperCfg, registry];\nExport[FileNameJoin[{NotebookDirectory[], \"paper_click.csd\"}], paperClick, \"Text\"];\n\npaperNote = TemporalSystem`Renderer`renderTo[\n   sdPaper, tempoPaper, TemporalSystem`Csound`csoundBackend, paperCfg, registry];\nExport[FileNameJoin[{NotebookDirectory[], \"paper_note.csd\"}], paperNote, \"Text\"];\nSelect[StringSplit[paperNote, \"\\n\"], StringStartsQ[#, \"i \"] &]", "Input"]
 
 }]

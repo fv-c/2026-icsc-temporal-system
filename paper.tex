@@ -167,18 +167,20 @@ express.
 
 The paclet also inspects itself: \texttt{drawTimeline} renders any store as
 lane-based graphics with the metric grid derived from the authored meter
-entities. Figure~\ref{fig:timeline} is such an export---a segment of the
-harmonic series on one instrument, with an amplitude curve, a trigger, and a
-meter change---produced by a single function call, with no external tool.
+entities. Figure~\ref{fig:timeline} is such an export---the most complex
+fixture of the paclet's Csound test suite, with two instruments, six
+control curves, four triggers and four meter signatures---produced by a
+single function call, with no external tool.
 
 \begin{figure}
 \centering
 \includegraphics[width=\linewidth]{figures/timeline_export}
 \caption{A timeline exported directly by the paclet
-(\texttt{drawTimeline}): harmonics 2--9 of A2 as notes with cent offsets on
-a \texttt{sine\_osc} lane, an amplitude curve, a \texttt{reverb} trigger,
-section markers, and a $4/4\to3/4$ meter change that reshapes the barline
-grid.}
+(\texttt{drawTimeline}): the most complex fixture of the Csound test
+suite---sixteen \texttt{sine\_osc} notes (several with cent offsets) and
+eight \texttt{click} hits, four triggers, six overlapping curves on
+amplitude and pan parameters, labeled section markers, and a
+$4/4 \to 5/8 \to 7/8 \to 3/4$ meter grid.}
 \label{fig:timeline}
 \end{figure}
 
@@ -294,7 +296,10 @@ Curves reach the sounding notes through declared bindings: by default an
 affected, the renderer extracts the \texttt{instr} block from its source
 \texttt{.orc} and emits a \emph{bound copy} whose p-field is wrapped by
 the control signal, re-pointing the affected notes to it; several curves
-may compose on one p-field, and the source orchestra is never modified.
+may compose on one p-field---in the example of Fig.~\ref{fig:timeline},
+two amplitude curves and an \texttt{ampScale} curve multiply into
+\texttt{p5}, while \texttt{panSweep} replaces and \texttt{panDepth}
+multiplies \texttt{p6}---and the source orchestra is never modified.
 The serializer writes the globals and the generated instruments into the
 orchestra beside the registry's \texttt{\#include} lines, sorts score
 statements by onset, and can still invoke the Csound binary to compile
