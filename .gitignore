@@ -334,6 +334,9 @@ TSWLatexianTemp*
 # extracted working copy of the ICSC template zip
 template_extracted/
 
+# submission archive produced by `make dist`
+icsc2026-submission.zip
+
 # macOS
 .DS_Store
 __MACOSX/
