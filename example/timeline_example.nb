@@ -1,0 +1,64 @@
+Notebook[{
+
+Cell["One Timeline, Many Renderings \[LongDash] Worked Example", "Title"],
+
+Cell["\<This notebook rebuilds, from temporal-system itself, the material \
+shown in the ICSC 2026 paper: the timeline figure (Fig. 2), the Csound \
+rendering of the same stemData (timeline_example.csd + .wav), and the \
+click-track companion quoted in Sect. 5 (click_track.csd + .wav). It needs a \
+local checkout of temporal-system; compiling audio additionally needs a \
+Csound binary. Evaluate the cells in order.\>", "Text"],
+
+Cell["1. Load temporal-system", "Section"],
+
+Cell["$temporalSystemRoot = \"/Users/master/Documents/GitHub/temporal-system\";\nSetDirectory[$temporalSystemRoot];\nGet[FileNameJoin[{$temporalSystemRoot, #}]] & /@ {\n    \"core/entities.wl\", \"core/stemData.wl\", \"core/tempoMap.wl\",\n    \"core/session.wl\", \"util/pitch.wl\", \"util/dynamics.wl\",\n    \"util/timeline.wl\", \"rendering/renderer.wl\",\n    \"rendering/csound.wl\", \"rendering/click.wl\"};", "Input"],
+
+Cell["2. The stemData behind the timeline", "Section"],
+
+Cell["\<A rising segment of the harmonic series \[LongDash] harmonics 2\[Dash]9 \
+of A2 \[LongDash] written as tempered spellings with cent offsets, on one \
+sine_osc lane; plus an amplitude curve, a trigger, two section markers, and \
+a 4/4 \[Rule] 3/4 meter change. The beat unit shown by the timeline is a \
+quarter note.\>", "Text"],
+
+Cell["sd = TemporalSystem`StemData`emptyStemData[];\nadd[e_] := (sd = TemporalSystem`StemData`addEntity[sd, e];\n   If[sd === $Failed, Print[\"addEntity failed: \", e]]);\n\nadd[TemporalSystem`Entities`makeMeter[\"m1\", 0, 4, 4]];\nadd[TemporalSystem`Entities`makeMeter[\"m2\", 8, 3, 4]];\n\nmkNote[id_, onset_, pitch_, dur_, dyn_] := TemporalSystem`Entities`makeNote[\n   id, onset, pitch, dur, dyn,\n   \"rendering\" -> <|\n     \"csound\" -> <|\"instrument\" -> \"sine_osc\"|>,\n     \"musicxml\" -> <|\"instrument\" -> \"sine_osc\"|>\n   |>\n];\n\nadd[mkNote[\"n1\", 0, {\"A3\", 0}, 1, \"p\"]];\nadd[mkNote[\"n2\", 1, {\"E4\", 2}, 1, \"p\"]];\nadd[mkNote[\"n3\", 2, {\"A4\", 0}, 1, \"mp\"]];\nadd[mkNote[\"n4\", 3, {\"C#5\", -14}, 1, \"mp\"]];\nadd[mkNote[\"n5\", 4, {\"E5\", 2}, 2, \"mf\"]];\nadd[mkNote[\"n6\", 6, {\"G5\", -31}, 2, \"mf\"]];\nadd[mkNote[\"n7\", 8, {\"A5\", 0}, 3, \"f\"]];\nadd[mkNote[\"n8\", 11, {\"B5\", 4}, 3, \"f\"]];\n\nadd[TemporalSystem`Entities`makeCurve[\"c1\", 0, \"amplitude\", 8,\n   {\"linear\", {{0, 0.15}, {4, 0.9}, {8, 0.3}}}]];\nadd[TemporalSystem`Entities`makeTrigger[\"t1\", 4, \"reverb\", \"enable\", {0.35}]];\nadd[TemporalSystem`Entities`makeMarker[\"mk1\", 0, \"A\"]];\nadd[TemporalSystem`Entities`makeMarker[\"mk2\", 8, \"B\"]];\n\nTemporalSystem`StemData`stemDataSize[sd]", "Input"],
+
+Cell["3. Tempo", "Section"],
+
+Cell["\<One displayed beat (a quarter) lasts 0.5 s, i.e. 120 BPM: the tempo \
+map anchors beat 0 at 0 s and beat 16 at 8 s.\>", "Text"],
+
+Cell["tm = TemporalSystem`TempoMap`makeTempoMap[{{0, 0.}, {16, 8.}}]", "Input"],
+
+Cell["4. The timeline", "Section"],
+
+Cell["g = TemporalSystem`Timeline`drawTimeline[sd, tm]", "Input"],
+
+Cell["\<Export the figure next to the paper sources (../figures).\>", "Text"],
+
+Cell["figDir = FileNameJoin[{ParentDirectory[NotebookDirectory[]], \"figures\"}];\nExport[FileNameJoin[{figDir, \"timeline_export.pdf\"}], g]\nExport[FileNameJoin[{figDir, \"timeline_export.png\"}], g, ImageResolution -> 300]", "Input"],
+
+Cell["5. Csound rendering and audio", "Section"],
+
+Cell["\<The audio bounce uses the notes and the meters only: the amplitude \
+curve and the reverb trigger address control-rate and realtime targets, not \
+note p-fields. With csoundCompileOnExport -> True the paclet writes the .csd \
+and calls the Csound binary to compile it to .wav in one step.\>", "Text"],
+
+Cell["sdAudio = Join[\n   TemporalSystem`StemData`emptyStemData[],\n   KeyTake[sd, {\"note\", \"state\"}]\n];\n\ncsoundBinary = SelectFirst[\n   {\"/usr/local/bin/csound\", \"/opt/homebrew/bin/csound\"},\n   FileExistsQ, \"csound\"];\n\nconfig = TemporalSystem`Session`makeSessionConfig[\n   \"sampleRate\" -> 44100,\n   \"instrumentsDir\" -> FileNameJoin[{$temporalSystemRoot, \"instruments\"}],\n   \"csoundBinary\" -> csoundBinary,\n   \"csoundCompileOnExport\" -> True\n];\nregistry = TemporalSystem`Session`loadOrchRegistry[config];\n\nallEntities[stem_] := Flatten[Values /@ Values[stem], 1];\nprims = DeleteMissing[\n   TemporalSystem`Csound`renderEntityToCSnd[#, tm, registry, config] & /@\n     allEntities[sdAudio]\n];\n\nTemporalSystem`Csound`serializeCSnd[prims, config, registry,\n  FileNameJoin[{NotebookDirectory[], \"timeline_example.csd\"}]]", "Input"],
+
+Cell["6. Click-track companion", "Section"],
+
+Cell["\<Two 4/4 bars at 120 BPM, authored in the paclet's whole-note beat \
+space (one 4/4 bar = 1). The click renderer walks the measure grid built \
+from the meter entities and accents each downbeat; the same serializer then \
+writes the .csd and compiles the .wav.\>", "Text"],
+
+Cell["sdClick = TemporalSystem`StemData`emptyStemData[];\nsdClick = TemporalSystem`StemData`addEntity[sdClick,\n   TemporalSystem`Entities`makeMeter[\"m1\", 0, 4, 4]];\nsdClick = TemporalSystem`StemData`addEntity[sdClick,\n   TemporalSystem`Entities`makeNote[\"n1\", 0, {\"A4\", 0}, 2, \"mf\",\n     \"rendering\" -> <|\"csound\" -> <|\"instrument\" -> \"sine_osc\", \"p6\" -> 0.5|>|>]];\ntempoClick = TemporalSystem`TempoMap`makeTempoSpec[{{0, 120.}}];\n\nclickPrims = TemporalSystem`Click`renderClickTrack[\n   sdClick, tempoClick, registry, config];\nTemporalSystem`Click`serializeClickCSnd[clickPrims, config, registry,\n  FileNameJoin[{NotebookDirectory[], \"click_track.csd\"}]]", "Input"],
+
+Cell["\<The one-note Csound rendering quoted in Sect. 4 of the paper comes \
+from the same store through the generic dispatcher.\>", "Text"],
+
+Cell["notesCsd = TemporalSystem`Renderer`renderTo[\n   sdClick, tempoClick, TemporalSystem`Csound`csoundBackend,\n   Join[config, <|\"csoundCompileOnExport\" -> False|>], registry];\nExport[FileNameJoin[{NotebookDirectory[], \"notes.csd\"}], notesCsd, \"Text\"];\nSelect[StringSplit[notesCsd, \"\\n\"], StringStartsQ[#, \"i \"] &]", "Input"]
+
+}]
