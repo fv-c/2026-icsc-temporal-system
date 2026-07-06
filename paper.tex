@@ -48,7 +48,8 @@ describes the problem and the design decisions behind the paclet, its anatomy
 implemented renderers. Particular attention goes to the Csound renderer,
 today the paclet's most complete backend: compiled
 tempo maps produce onset and duration seconds only at render time, session
-tuning produces p4 frequencies, and orchestras remain ordinary \texttt{.orc}
+tuning produces p4 frequencies, curve entities compile to k-rate control
+signals bound to score p-fields, and orchestras remain ordinary \texttt{.orc}
 files addressed by stable named instruments, continuing the score--orchestra
 separation that Csound inherits from the \textsc{music~n} family. A dedicated
 click-track backend derives rehearsal audio from the same meter and tempo
@@ -95,7 +96,7 @@ a restrictive contract for its own payload.
 
 \section{Anatomy of the Paclet}
 
-The paclet comprises fourteen modules exposing 79 public functions,
+The paclet comprises fourteen modules exposing 80 public functions,
 organized in the three layers of Fig.~\ref{fig:layers}: \texttt{core}
 (entities, store, tempo, session), \texttt{rendering} (dispatcher and four
 backends), and \texttt{util} (pitch, rhythm, dynamics, validation, timeline
@@ -187,7 +188,8 @@ A backend is data: an association with an id, a renderer, a serializer, the
 primitive types it emits, and its fallback policy. The generic dispatcher
 \texttt{renderTo[stemData, tempo, backend, config, registry]} is the single
 entry point for all outputs. Four backends exist. \emph{Csound} compiles
-entities to score statements (Sect.~\ref{sec:csound}). \emph{Click} derives
+the whole store to score and orchestra primitives
+(Sect.~\ref{sec:csound}). \emph{Click} derives
 a standalone rehearsal track from meter and tempo alone
 (Sect.~\ref{sec:click}). \emph{MusicXML} builds measures from meter state,
 splits notes at barlines into tied fragments, and validates measure
@@ -198,7 +200,8 @@ beta and visually validated against a commercial engraving application.
 sampled at a configurable control rate---for dispatch as OSC messages
 \cite{osc} to whatever is listening: a graphical patcher as readily as a
 running Csound instance through its OSC opcodes. Not every entity exists
-everywhere: curves become Csound f-tables but have no notation image;
+everywhere: curves become k-rate control signals in the Csound projection
+but have no notation image;
 spelling matters to MusicXML and not to synthesis. The paclet records these fidelity differences per entity--backend
 pair instead of pretending projections are lossless.
 
@@ -209,10 +212,12 @@ fixes the paclet's rendering idiom (Fig.~\ref{fig:pipeline}). Its p-field conven
 is stable: \texttt{p1} instrument, \texttt{p2} onset seconds, \texttt{p3}
 duration seconds, \texttt{p4} frequency in Hz, \texttt{p5} amplitude in
 $[0,1]$, \texttt{p6}+ passed through from the entity's
-\texttt{rendering["csound"]} payload. Notes and triggers become
-\texttt{i}~statements; curves and trajectories become GEN\,$-2$
-\texttt{f}~tables sampled at 512 points; markers and annotations are
-skipped as non-sounding.
+\texttt{rendering["csound"]} payload. The renderer takes the store as a
+whole (\texttt{renderCSnd}): notes and triggers become
+\texttt{i}~statements, markers become onset-ordered score comments, and
+each curve becomes a k-rate control signal held in a global
+variable---an \texttt{f}-table reader or a generated \texttt{transeg},
+per session choice.
 
 \begin{figure}
 \centering
@@ -228,23 +233,26 @@ skipped as non-sounding.
    session config; orchestra registry)}};
 \node[box, below=5.5mm of store.south west, anchor=north west,
   minimum width=53mm] (rend)
-  {\texttt{renderEntityToCSnd}\\[-1pt]
-   {\scriptsize note/trigger/state $\to$ \texttt{i};\,
-    curve/traj.\ $\to$ \texttt{f}}};
+  {\texttt{renderCSnd} (whole store)\\[-1pt]
+   {\scriptsize note/trigger $\to$ \texttt{i};\, marker $\to$ comment}\\[-1pt]
+   {\scriptsize curve $\to$ k-signal bound to p-fields}};
 \node[box, below=5.5mm of store.south east, anchor=north east,
   minimum width=53mm] (click)
   {\texttt{renderClickTrack}\\[-1pt]
    {\scriptsize meter grid $\to$ downbeat/beat clicks}};
 \node[data, below=5mm of rend, minimum width=53mm] (prim)
-  {\texttt{i}/\texttt{f} primitives\\[-1pt]
-   {\scriptsize p1 name\; p2 s\; p3 s\; p4 Hz\; p5 amp\; p6+}};
+  {score $+$ orchestra primitives\\[-1pt]
+   {\scriptsize p1 name\; p2 s\; p3 s\; p4 Hz\; p5 amp\; p6+}\\[-1pt]
+   {\scriptsize \texttt{f}~tables, comments, k-globals, bound
+    \texttt{instr}s}};
 \node[data, below=5mm of click, minimum width=53mm] (cprim)
   {click events\\[-1pt]
    {\scriptsize strong 1760 Hz / weak 1100 Hz}};
-\node[box, below=32mm of store, minimum width=40mm] (ser)
+\node[box, below=37mm of store, minimum width=40mm] (ser)
   {\texttt{serializeCSnd}};
 \node[data, below=4.5mm of ser, minimum width=70mm] (csd)
-  {\texttt{.csd} --- score $+$ \texttt{\#include}d \texttt{.orc} orchestras};
+  {\texttt{.csd} --- score $+$ generated code $+$ \texttt{\#include}d
+   \texttt{.orc}};
 \node[box, dashed, below=4.5mm of csd, minimum width=70mm] (wav)
   {optional: \texttt{csound -W -o} $\to$ \texttt{.wav} at session rate};
 \draw[arrow] (store.south -| rend) -- (rend.north);
@@ -256,8 +264,9 @@ skipped as non-sounding.
 \draw[arrow] (ser) -- (csd);
 \draw[arrow] (csd) -- (wav);
 \end{tikzpicture}
-\caption{Both Csound-family renderers emit the same primitives and share
-one serializer; instruments stay in external \texttt{.orc} files.}
+\caption{Both Csound-family renderers share one serializer; source
+instruments stay in external \texttt{.orc} files, and curve bindings add
+generated copies without touching them.}
 \label{fig:pipeline}
 \end{figure}
 
@@ -278,12 +287,18 @@ i "sine_osc" 0. 4. 440. 0.65 0.5
 
 \noindent
 (A4, \emph{mf}, two whole notes at 120~BPM, actual paclet output) remains
-readable and stable as the orchestra grows. The serializer sorts primitives
-by onset, writes \texttt{sr}, \texttt{ksmps}, \texttt{nchnls},
-\texttt{0dbfs} from the session configuration, prefixes \texttt{\#include}
-lines for the registry, and can optionally invoke the Csound binary to
-compile the exported \texttt{.csd} to audio---the test suite verifies the
-resulting sample rate.
+readable and stable as the orchestra grows.
+
+Curves reach the sounding notes through declared bindings: by default an
+\texttt{amplitude} curve multiplies \texttt{p5}. For each instrument
+affected, the renderer extracts the \texttt{instr} block from its source
+\texttt{.orc} and emits a \emph{bound copy} whose p-field is wrapped by
+the control signal, re-pointing the affected notes to it; several curves
+may compose on one p-field, and the source orchestra is never modified.
+The serializer writes the globals and the generated instruments into the
+orchestra beside the registry's \texttt{\#include} lines, sorts score
+statements by onset, and can still invoke the Csound binary to compile
+the exported \texttt{.csd} to audio.
 
 \section{A Click Track from the Same Timeline}\label{sec:click}
 
