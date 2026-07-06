@@ -329,3 +329,11 @@ TSWLatexianTemp*
 # option is specified. Footnotes are the stored in a file with suffix Notes.bib.
 # Uncomment the next line to have this generated file ignored.
 #*Notes.bib
+
+## Project-specific:
+# extracted working copy of the ICSC template zip
+template_extracted/
+
+# macOS
+.DS_Store
+__MACOSX/
