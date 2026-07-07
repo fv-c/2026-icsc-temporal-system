@@ -15,7 +15,7 @@ order.\>", "Text"],
 
 Cell["1. Load temporal-system", "Section"],
 
-Cell["$temporalSystemRoot = \"/Users/master/Documents/GitHub/temporal-system\";\nSetDirectory[$temporalSystemRoot];\nGet[FileNameJoin[{$temporalSystemRoot, #}]] & /@ {\n    \"core/entities.wl\", \"core/stemData.wl\", \"core/tempoMap.wl\",\n    \"core/session.wl\", \"util/pitch.wl\", \"util/dynamics.wl\",\n    \"util/timeline.wl\", \"rendering/renderer.wl\",\n    \"rendering/csound.wl\", \"rendering/click.wl\"};", "Input"],
+Cell["$temporalSystemRoot = \"<TEMPORAL_SYSTEM_ROOT>\";\nSetDirectory[$temporalSystemRoot];\nGet[FileNameJoin[{$temporalSystemRoot, #}]] & /@ {\n    \"core/entities.wl\", \"core/stemData.wl\", \"core/tempoMap.wl\",\n    \"core/session.wl\", \"util/pitch.wl\", \"util/dynamics.wl\",\n    \"util/timeline.wl\", \"rendering/renderer.wl\",\n    \"rendering/csound.wl\", \"rendering/click.wl\"};", "Input"],
 
 Cell["2. Session: curve bindings and click grid", "Section"],
 

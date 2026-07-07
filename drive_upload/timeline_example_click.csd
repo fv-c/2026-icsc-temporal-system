@@ -7,7 +7,7 @@ sr = 44100
 ksmps = 32
 nchnls = 2
 0dbfs = 1
-#include "/Users/master/Documents/GitHub/temporal-system/instruments/click.orc"
+#include "<INSTRUMENTS_DIR>/click.orc"
 </CsInstruments>
 <CsScore>
 f 1 0 16384 10 1

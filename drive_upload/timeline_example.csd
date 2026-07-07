@@ -81,8 +81,8 @@ instr TS_curve_panB_60c2b802
   kpos line 0, p3, 1
   gkTS_panSweep tablei kpos, p4, 1
 endin
-#include "/Users/master/Documents/GitHub/temporal-system/instruments/click.orc"
-#include "/Users/master/Documents/GitHub/temporal-system/instruments/sine_osc.orc"
+#include "<INSTRUMENTS_DIR>/click.orc"
+#include "<INSTRUMENTS_DIR>/sine_osc.orc"
 </CsInstruments>
 <CsScore>
 f 1 0 16384 10 1
