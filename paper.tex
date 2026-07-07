@@ -15,6 +15,10 @@
 \newcommand{\keywords}[1]{\par\addvspace\baselineskip
 \noindent\keywordname\enspace\ignorespaces#1}
 
+% Supplementary material (full example artifacts). Replace with the real
+% Drive/OSF folder URL before submission.
+\newcommand{\supplementaryurl}{https://drive.google.com/PLACEHOLDER-REPLACE-ME}
+
 \pagestyle{headings}
 
 \begin{document}
@@ -26,41 +30,34 @@
 \titlerunning{One Timeline, Many Renderings}
 
 % TO GUARANTEE THE DOUBLE BLIND REVIEW PROCESS, GENERIC
-% AUTHOR NAMES AND INSTITUTIONS ARE KEPT
-\author{AuthorA\inst{1}\and AuthorB\inst{2}\and AuthorC\inst{3}
-\thanks{Please place acknowledgement here.}}
+% AUTHOR NAMES AND INSTITUTION ARE KEPT
+\author{AuthorA \and AuthorB \and AuthorC}
 \authorrunning{AuthorA et al.}
-\institute{InstituteA \and InstituteB \and InstituteC}
+\institute{InstituteA}
 
 \maketitle
 
 \begin{abstract}
 Algorithmic composition rarely ends in a single medium: the same musical plan
 may need to become a Csound score for synthesis, engraved notation for
-performers, a real-time control stream, and a click track for rehearsal. When
-each artifact is authored or repaired separately, their timelines drift apart.
-This paper presents Temporal System, a Wolfram Language paclet that treats
-heterogeneous output as a projection problem: one immutable store of typed
-musical entities, placed on a rational beat timeline, is compiled by
-per-backend renderers into Csound, MusicXML, and OSC artifacts that stay
-mutually synchronous because they derive from one store: Csound carries the
-electroacoustic and synthesis layer, MusicXML the symbolic score (in beta
-against a reference schema), and OSC the real-time layer for live
-electronics. The paper
-describes the problem and the design decisions behind the paclet, its anatomy
-(temporal, semantic, and rendering layers across fourteen modules), and the
-implemented renderers. Particular attention goes to the Csound renderer,
-the backend that fixes the paclet's rendering idiom: compiled
-tempo maps produce onset and duration seconds only at render time, session
-tuning produces p4 frequencies, curve entities compile to k-rate control
-signals bound to score p-fields, and orchestras remain ordinary \texttt{.orc}
-files addressed by stable named instruments, continuing the score--orchestra
-separation that Csound inherits from the \textsc{music~n} family. A dedicated
-click-track backend derives rehearsal audio from the same meter and tempo
-data and reuses the Csound serializer, showing how inexpensively a further
-projection can be added within a rendering family once the temporal core is
-shared. Figures include a
-timeline visualization exported directly from the paclet.
+performers, a real-time control stream, and a click track for rehearsal.
+Authored or repaired separately, these timelines drift apart. We present
+Temporal System, a Wolfram Language paclet that treats heterogeneous output as
+a projection problem: one immutable store of typed musical entities, placed on
+a rational beat timeline, is compiled by per-backend renderers into Csound
+(electroacoustic and synthesis), MusicXML (symbolic score, in beta against a
+reference schema), and OSC (real-time live electronics) artifacts that stay
+synchronous because they share one store. We describe the design decisions, the
+anatomy (temporal, semantic, and rendering layers; fourteen modules), and the
+renderers. Particular attention goes to Csound,
+which fixes the rendering idiom: compiled tempo maps yield onset and duration
+seconds only at render time, session tuning yields p4 frequencies, curve
+entities compile to k-rate control signals bound to score p-fields, and
+orchestras remain ordinary \texttt{.orc} files addressed by stable named
+instruments---the score--orchestra separation Csound inherits from the
+\textsc{music~n} family. A click-track backend derives rehearsal audio from the
+same meter and tempo and reuses the Csound serializer---how cheaply a further
+projection follows once the temporal core is shared.
 \keywords{Csound, algorithmic composition, music representation, Wolfram
 Language, click track}
 \end{abstract}
@@ -68,51 +65,41 @@ Language, click track}
 
 \section{Introduction}
 
-Long before rendering became plural, computing composers had already
-separated structure from sound. At Bell Labs, James Tenney generated note
-lists for the \textsc{music~n} programs to play \cite{tenney,mathews}; in
-Utrecht, Gottfried Michael Koenig's \emph{Project~1} and \emph{Project~2}
-computed a piece as tables whose realization belonged to a later
-stage---players, the studio and, in his last electronic works, Csound
-itself \cite{koenig}. In both practices the program owns \emph{time and
-structure} while a separate system owns \emph{sound}: the division Csound
-institutionalizes as the orchestra--score split \cite{csoundbook}.
+Long before rendering became plural, computing composers had already separated
+structure from sound. At Bell Labs, Tenney generated note lists for the
+\textsc{music~n} programs \cite{tenney,mathews}; in Utrecht, Koenig's
+\emph{Project~1} and \emph{Project~2} computed a piece as tables realized at a
+later stage---players, the studio, and in his last works Csound itself
+\cite{koenig}. In both, the program owns \emph{time and structure} and a
+separate system owns \emph{sound}: the orchestra--score split Csound
+institutionalizes \cite{csoundbook}.
 
-Contemporary practice multiplies the realization stages. A mixed work may
-need a \texttt{.csd} for synthesis, MusicXML for engraving, a timed control
-stream for the live-electronics layer, and a click track for the
-performers. These formats
-encode time differently---seconds, divisions per quarter, milliseconds,
-audio samples---so maintaining them by hand means maintaining four diverging
-timelines. Computer-assisted composition environments have long addressed
-parts of this problem \cite{openmusic,taube}; Temporal System, the Wolfram
-Language paclet described here~\cite{wolfram}, addresses it by making one authored timeline
-the only source of truth and demoting every output file to a derived
+Contemporary practice multiplies the realization stages: a mixed work may need
+a \texttt{.csd} for synthesis, MusicXML for engraving, a timed control stream
+for live electronics, and a click track for performers. These encode time
+differently---seconds, divisions per quarter, milliseconds, samples---so
+maintaining them by hand means maintaining four diverging timelines.
+Computer-assisted composition environments have long addressed parts of this
+\cite{openmusic,taube}; Temporal System~\cite{wolfram} makes one authored
+timeline the only source of truth and demotes every output file to a derived
 artifact.
 
-The idea of one model feeding many outputs is itself well established.
-\emph{music21} exposes a single object model exporting to MusicXML, MIDI,
-Lilypond and text \cite{music21}; \emph{abjad} drives Lilypond engraving
-from a persistent Python score model \cite{abjad}; MEI encodes a canonical
-score that Verovio projects to many targets \cite{mei,verovio}; and
-\emph{bach} and \emph{cage} carry a score/timeline abstraction into Max for
-real-time realization \cite{bach}. These systems are organized around
-notation or engraving, or---where realization is real-time---around a single
-host environment; in each, time is ultimately notational or measured in
-seconds. Temporal System makes something else primary: one beat-space
-infrastructure, in which onsets are exact Rationals---infinite in precision
-and musical rather than clock time---drives every layer at once, the fixed
-electroacoustic through Csound, the symbolic score through MusicXML, and the
-live stream through OSC, with conversion to seconds, hertz and samples
-deferred to each renderer. What makes this practical is the host language:
-the store, its exact tempo-map inversion, its session-parameterized tuning
-and its restrictive per-backend contracts are all expressed in Wolfram
-Language, a high-level symbolic system in which rationals stay exact,
-transformations are functional and composable, and a vast built-in
-library---symbolic algebra, signal processing, visualization, the paclet's
-own timeline graphics included---is available in the same environment where
-the timeline is authored. Authoring the piece and compiling its every
-projection therefore share one language, not a chain of separate programs.
+One model feeding many outputs is well established. \emph{music21} exports a
+single object model to MusicXML, MIDI, Lilypond and text \cite{music21};
+\emph{abjad} drives Lilypond from a persistent Python score model
+\cite{abjad}; MEI encodes a canonical score that Verovio projects to many
+targets \cite{mei,verovio}; \emph{bach} and \emph{cage} carry a
+score/timeline abstraction into Max for real-time realization \cite{bach}.
+These are organized around notation or a single real-time host, and in each
+time is ultimately notational or measured in seconds. Temporal System instead
+makes one beat-space infrastructure primary: onsets are exact Rationals
+(musical, not clock, time), driving every layer at once, with conversion to
+seconds, hertz and samples deferred to each renderer. The host language makes
+this practical: store, tempo-map inversion, session tuning and per-backend
+contracts are all Wolfram Language, in which rationals stay exact,
+transformations compose, and a vast built-in library (including the paclet's own
+timeline graphics) sits where the timeline is authored---so authoring the piece
+and compiling its every projection share one language, not a chain of programs.
 
 Temporal System's design decisions are few and strict: (i)~events live in an immutable
 store of typed entities whose onsets are exact Rationals in beat space,
@@ -123,60 +110,57 @@ instruments remain external \texttt{.orc} files, as in Koenig's and Tenney's
 workflows; (v)~the shared store is permissive, while each renderer enforces
 a restrictive contract for its own payload.
 
-One trade-off is worth stating plainly. Authoring the source of truth
-requires Wolfram Language, a commercial environment, whereas Csound and much
-of its ecosystem are open-source and cost-sensitive. The dependency is
-confined to authoring: the artifacts the paclet emits---the \texttt{.csd}
-with its \texttt{\#include}d \texttt{.orc} files, MusicXML, and the OSC
-JSON---are plain text in open formats and need no Wolfram runtime to
-compile, engrave, or dispatch. A freely available Wolfram Engine covers
-development, evaluation, and non-commercial use, though commercial or
-organizational production still requires a paid license.
+One trade-off is worth stating. Authoring the source of truth requires
+Wolfram Language, a commercial environment, whereas Csound and much of its
+ecosystem are open-source. The dependency is confined to authoring: the
+emitted artifacts---the \texttt{.csd} with its \texttt{\#include}d
+\texttt{.orc} files, MusicXML, and the OSC JSON---are plain text in open
+formats needing no Wolfram runtime to compile, engrave, or dispatch. A free
+Wolfram Engine covers development and non-commercial use; commercial
+production still requires a paid license.
 
 \section{Anatomy of the Paclet}
 
-The paclet comprises fourteen modules exposing 80 public functions,
-organized in the three layers of Fig.~\ref{fig:layers}: \texttt{core}
-(entities, store, tempo, session), \texttt{rendering} (dispatcher and four
-backends), and \texttt{util} (pitch, rhythm, dynamics, validation, timeline
-graphics). All functions are pure; store operations return new stores.
+The paclet comprises fourteen modules exposing 80 public functions in the
+three layers of Fig.~\ref{fig:layers}: \texttt{core} (entities, store, tempo,
+session), \texttt{rendering} (dispatcher and four backends), and \texttt{util}
+(pitch, rhythm, dynamics, validation, timeline graphics). All functions are
+pure; store operations return new stores.
 
 \begin{figure}
 \centering
 \begin{tikzpicture}[
   font=\footnotesize,
-  layer/.style={draw, minimum width=98mm, minimum height=9mm, align=center,
-    fill=gray!8},
-  backend/.style={draw, minimum width=21mm, minimum height=8.5mm,
+  layer/.style={draw, minimum width=104mm, minimum height=5.5mm,
+    align=center, fill=gray!8},
+  backend/.style={draw, minimum width=22mm, minimum height=6mm,
     align=center, fill=white},
   arrow/.style={-Latex}
 ]
 \node[layer] (l1) {\textbf{Layer I --- temporal}\quad tempo specifications
   $\to$ compiled tempo maps; rational onsets};
-\node[layer, below=3mm of l1] (l2) {\textbf{Layer II --- semantic}\quad
+\node[layer, below=1.6mm of l1] (l2) {\textbf{Layer II --- semantic}\quad
   typed entities: note, rest, meter, curve, trigger, marker, \dots};
-\node[layer, below=3mm of l2] (l3) {\textbf{Layer III --- rendering}\quad
+\node[layer, below=1.6mm of l2] (l3) {\textbf{Layer III --- rendering}\quad
   one restrictive contract per backend};
-\node[backend, below=6mm of l3.south, xshift=-37.5mm] (cs)
+\node[backend, below=4mm of l3.south, xshift=-39mm] (cs)
   {Csound\\[-1pt] {\scriptsize\texttt{.csd}}};
-\node[backend, below=6mm of l3.south, xshift=-12.5mm] (ck)
+\node[backend, below=4mm of l3.south, xshift=-13mm] (ck)
   {click track\\[-1pt] {\scriptsize\texttt{.csd}/\texttt{.wav}}};
-\node[backend, below=6mm of l3.south, xshift=12.5mm] (mx)
+\node[backend, below=4mm of l3.south, xshift=13mm] (mx)
   {MusicXML\\[-1pt] {\scriptsize\texttt{.musicxml}}};
-\node[backend, below=6mm of l3.south, xshift=37.5mm] (osc)
+\node[backend, below=4mm of l3.south, xshift=39mm] (osc)
   {OSC events\\[-1pt] {\scriptsize\texttt{.json}}};
 \draw[arrow] (l1) -- (l2);
 \draw[arrow] (l2) -- (l3);
 \foreach \b in {cs,ck,mx,osc} {\draw[arrow] (l3.south) -- (\b.north);}
-\node[draw, dashed, fit=(l1)(l2), inner sep=2.5pt] (shared) {};
-\node[font=\scriptsize, anchor=west, rotate=90]
-  at ($(shared.east)+(1.5mm,-9mm)$) {backend-agnostic};
-\node[draw, dashed, fit=(l3)(cs)(osc), inner sep=2.5pt] (spec) {};
-\node[font=\scriptsize, anchor=west, rotate=90]
-  at ($(spec.east)+(1.5mm,-11mm)$) {backend-specific};
+\node[draw, dashed, fit=(l1)(l2), inner sep=1.5pt] {};
+\node[draw, dashed, fit=(l3)(cs)(osc), inner sep=1.5pt] {};
 \end{tikzpicture}
-\caption{The three-layer model. Adding a backend adds a contract in
-Layer~III; Layers I and II never change to accommodate an output format.}
+\caption{The three-layer model (dashed groups: Layers I--II
+backend-agnostic, Layer~III and the backends backend-specific). Adding a
+backend adds a contract in Layer~III; Layers I and II never change to
+accommodate an output format.}
 \label{fig:layers}
 \end{figure}
 
@@ -187,129 +171,114 @@ inversion. Onsets and durations are Rationals in musical duration space;
 conversion to seconds or samples happens only inside renderers.
 
 \textbf{Layer II.} The store groups entities by type
-(\texttt{stemData[type][id]}, giving $O(1)$ typed access) across eleven
-types: note, rest, trigger, curve, process, state, marker, interval,
-trajectory, annotation, gesture. A note carries pitch (spelling plus cents,
-MIDI float, or frequency), duration, dynamic, and a \texttt{rendering}
-association keyed by backend id---the one place where backend-specific
-payloads travel with the entity. Meter is a state entity: measure structure
-is authored, not guessed. A session configuration carries everything a
-renderer may not hardcode, starting with \texttt{tuningA4} (default 440~Hz,
-freely reassignable).
+(\texttt{stemData[type][id]}, $O(1)$ typed access) across eleven types (note,
+rest, trigger, curve, process, state, marker, interval, trajectory,
+annotation, gesture). A note carries pitch (spelling plus cents, MIDI float,
+or frequency), duration, dynamic, and a \texttt{rendering} association keyed by
+backend id---the one place backend-specific payloads travel with the entity.
+Meter is a state entity: measure structure is authored, not guessed. A session
+configuration carries everything a renderer may not hardcode, starting with
+\texttt{tuningA4} (default 440~Hz, freely reassignable).
 
-\textbf{Layer III.} Constructors validate only the shared shape and require
-each \texttt{rendering[backend]} payload to be an association; the keys
-inside belong to the backend contract. Malformed Csound payloads are
-therefore Csound contract errors, local to one renderer, and each backend
-declares a fallback policy (warn, approximate) for material it cannot
-express.
+\textbf{Layer III.} Constructors validate only the shared shape and require each
+\texttt{rendering[backend]} payload to be an association whose keys belong to the
+backend contract; malformed Csound payloads are therefore Csound contract
+errors, local to one renderer, and each backend declares a fallback policy
+(warn, approximate) for material it cannot express.
 
 The paclet also inspects itself: \texttt{drawTimeline} renders any stemData as
 lane-based graphics with the metric grid derived from the authored meter
-entities. Figure~\ref{fig:timeline} is such an export---the most complex
-fixture of the paclet's Csound test suite, with two instruments, six
-control curves, four triggers and four meter signatures---produced by a
-single function call, with no external tool. Every fixture in this suite
-renders to a \texttt{.csd} that Csound compiles without error, and its
-rendered audio was auditioned.
+entities (Fig.~\ref{fig:timeline}), from a single function call with no external
+tool. Every fixture in the Csound suite renders to a \texttt{.csd} that Csound
+compiles without error, and its rendered audio was auditioned.
 
 \begin{figure}
 \centering
-\includegraphics[width=\linewidth]{figures/timeline_export}
+\includegraphics[width=0.66\linewidth]{figures/timeline_export}
 \caption{A timeline exported directly by the paclet
-(\texttt{drawTimeline}): the most complex fixture of the Csound test
-suite---sixteen \texttt{sine\_osc} notes (several with cent offsets) and
-eight \texttt{click} hits, four triggers, six overlapping curves on
-amplitude and pan parameters, labeled section markers, and a
-$4/4 \to 5/8 \to 7/8 \to 3/4$ meter grid. It is a stress fixture that
-exercises many entity types at once, not a representative composition.}
+(\texttt{drawTimeline}): the Csound suite's most complex
+fixture---sixteen \texttt{sine\_osc} notes (several with cent offsets),
+eight \texttt{click} hits, four triggers, six overlapping amplitude/pan
+curves, section markers, and a $4/4 \to 5/8 \to 7/8 \to 3/4$ meter grid. A
+stress fixture exercising many entity types at once, not a representative
+composition.}
 \label{fig:timeline}
 \end{figure}
 
 \section{The Implemented Renderers}
 
 A backend is data: an association with an id, a renderer, a serializer, the
-primitive types it emits, and its fallback policy. The generic dispatcher
+primitive types it emits, and a fallback policy. The generic dispatcher
 \texttt{renderTo[stemData, tempo, backend, config, registry]} is the single
-entry point for all outputs. Four backends exist. \emph{Csound} compiles
-the whole stemData to score and orchestra primitives
-(Sect.~\ref{sec:csound}). \emph{Click} derives
-a standalone rehearsal track from meter and tempo alone
-(Sect.~\ref{sec:click}). \emph{MusicXML} builds measures from meter state,
-splits notes at barlines into tied fragments, and validates measure
-capacity, part coverage, and tie and chord integrity; it is explicitly a
-lossy projection with a declared coverage profile \cite{good}, currently in
-beta, its export checked by round-tripping through a commercial engraving
-application and comparing the re-import against the source stemData for tie,
-meter and part-separation fidelity.
-\emph{OSC} emits a schedule-ready JSON event list in milliseconds---curves
-sampled at a configurable control rate---for dispatch as OSC messages
-\cite{osc} to whatever is listening: a graphical patcher as readily as a
-running Csound instance through its OSC opcodes. Not every entity exists
-everywhere: curves become k-rate control signals in the Csound projection
-but have no notation image;
-spelling matters to MusicXML and not to synthesis. The paclet records these fidelity differences per entity--backend
-pair instead of pretending projections are lossless.
+entry point. Four backends exist. \emph{Csound} compiles the whole stemData to
+score and orchestra primitives (Sect.~\ref{sec:csound}); \emph{Click} derives a
+standalone rehearsal track from meter and tempo alone (Sect.~\ref{sec:click}).
+\emph{MusicXML} builds measures from meter state, splits notes at barlines into
+tied fragments, and validates measure capacity, part coverage, and tie and
+chord integrity; it is an explicitly lossy projection with a declared coverage
+profile \cite{good}, currently in beta, its export checked by round-tripping
+through a commercial engraving application for tie, meter and part-separation
+fidelity. \emph{OSC} emits a
+schedule-ready JSON event list in milliseconds---curves sampled at a
+configurable control rate---for dispatch as OSC messages \cite{osc} to whatever
+is listening, a graphical patcher or a running Csound instance through its OSC
+opcodes. Not every entity exists everywhere: curves become k-rate control
+signals in Csound but have no notation image; spelling matters to MusicXML, not
+to synthesis---differences the paclet records per entity--backend pair rather
+than pretending projections are lossless.
 
 \section{The Csound Renderer}\label{sec:csound}
 
-Csound is the oldest backend and the one that fixes the paclet's rendering
-idiom, carrying the electroacoustic and synthesis output
-(Fig.~\ref{fig:pipeline}). Its p-field convention
-is stable: \texttt{p1} instrument, \texttt{p2} onset seconds, \texttt{p3}
-duration seconds, \texttt{p4} frequency in Hz, \texttt{p5} amplitude in
-$[0,1]$, \texttt{p6}+ passed through from the entity's
-\texttt{rendering["csound"]} payload. The renderer takes the stemData as a
-whole (\texttt{renderCSnd}): notes and triggers become
-\texttt{i}~statements, markers become onset-ordered score comments, and
-each curve becomes a k-rate control signal held in a global
-variable---an \texttt{f}-table reader or a generated \texttt{transeg},
-per session choice. In the \texttt{f}-table form the curve is stored as a
-GEN-2 table---512 points by default, itself a session parameter---read at
-k-rate by \texttt{tablei}, which interpolates linearly between samples.
+Csound is the oldest backend and fixes the paclet's rendering idiom, carrying
+the electroacoustic and synthesis output (Fig.~\ref{fig:pipeline}). Its p-field
+convention is stable: \texttt{p1} instrument, \texttt{p2} onset seconds,
+\texttt{p3} duration seconds, \texttt{p4} frequency in Hz, \texttt{p5} amplitude
+in $[0,1]$, \texttt{p6}+ from the entity's \texttt{rendering["csound"]} payload.
+The renderer (\texttt{renderCSnd}) takes the whole stemData: notes and triggers
+become \texttt{i}~statements, markers onset-ordered score comments, and each
+curve a k-rate control signal in a global variable---an \texttt{f}-table reader
+or a generated \texttt{transeg}, per session choice. In the \texttt{f}-table
+form the curve is a GEN-2 table (512 points by default, a session parameter)
+read at k-rate by \texttt{tablei} with linear interpolation.
 
 \begin{figure}
 \centering
 \begin{tikzpicture}[
   font=\footnotesize,
-  box/.style={draw, align=center, inner sep=3pt, minimum height=7.5mm,
-    fill=white},
+  box/.style={draw, align=center, inner sep=2.5pt, fill=white},
   data/.style={box, fill=gray!8},
   arrow/.style={-Latex}
 ]
-\node[data, minimum width=110mm] (store)
-  {entity store $+$ tempo map \quad {\scriptsize (rational beats;
-   session config; orchestra registry)}};
-\node[box, below=5.5mm of store.south west, anchor=north west,
-  minimum width=53mm] (rend)
-  {\texttt{renderCSnd} (whole store)\\[-1pt]
-   {\scriptsize note/trigger $\to$ \texttt{i};\, marker $\to$ comment}\\[-1pt]
-   {\scriptsize curve $\to$ k-signal bound to p-fields}};
-\node[box, below=5.5mm of store.south east, anchor=north east,
-  minimum width=53mm] (click)
+\node[box, text width=28mm] (rend)
+  {\texttt{renderCSnd}\\[-1pt]
+   {\scriptsize note/trig $\to$ \texttt{i}; marker $\to$ comment;
+    curve $\to$ k-signal on p-fields}};
+\node[box, text width=28mm, below=7mm of rend] (click)
   {\texttt{renderClickTrack}\\[-1pt]
    {\scriptsize meter grid $\to$ downbeat/beat clicks}};
-\node[data, below=5mm of rend, minimum width=53mm] (prim)
+\node[data, text width=21mm, left=3mm of $(rend.west)!0.5!(click.west)$] (store)
+  {entity store $+$ tempo map\\[-1pt]
+   {\scriptsize rational beats; session config; orchestra registry}};
+\node[data, text width=27mm, right=3mm of rend] (prim)
   {score $+$ orchestra primitives\\[-1pt]
-   {\scriptsize p1 name\; p2 s\; p3 s\; p4 Hz\; p5 amp\; p6+}\\[-1pt]
-   {\scriptsize \texttt{f}~tables, comments, k-globals, bound
-    \texttt{instr}s}};
-\node[data, below=5mm of click, minimum width=53mm] (cprim)
+   {\scriptsize p1 name\; p2 s\; p3 s\; p4 Hz\; p5 amp\; p6+;
+    \texttt{f} tables, comments, k-globals, bound \texttt{instr}s}};
+\node[data, text width=24mm, right=3mm of click] (cprim)
   {click events\\[-1pt]
    {\scriptsize strong 1760 Hz / weak 1100 Hz}};
-\node[box, below=37mm of store, minimum width=40mm] (ser)
-  {\texttt{serializeCSnd}};
-\node[data, below=4.5mm of ser, minimum width=70mm] (csd)
-  {\texttt{.csd} --- score $+$ generated code $+$ \texttt{\#include}d
+\node[box, text width=17mm, right=3mm of $(prim.east)!0.5!(cprim.east)$] (ser)
+  {\texttt{serialize-\\CSnd}};
+\node[data, text width=27mm, right=3mm of ser] (csd)
+  {\texttt{.csd}: score $+$ generated code $+$ \texttt{\#include}d
    \texttt{.orc}};
-\node[box, dashed, below=4.5mm of csd, minimum width=70mm] (wav)
-  {optional: \texttt{csound -W -o} $\to$ \texttt{.wav} at session rate};
-\draw[arrow] (store.south -| rend) -- (rend.north);
-\draw[arrow] (store.south -| click) -- (click.north);
+\node[box, dashed, text width=27mm, below=5mm of csd] (wav)
+  {{\scriptsize optional \texttt{csound -W -o}: \texttt{.wav} at session rate}};
+\draw[arrow] (store) -- (rend);
+\draw[arrow] (store) -- (click);
 \draw[arrow] (rend) -- (prim);
 \draw[arrow] (click) -- (cprim);
-\draw[arrow] (prim.south) -- (ser.west);
-\draw[arrow] (cprim.south) -- (ser.east);
+\draw[arrow] (prim.east) -- (ser);
+\draw[arrow] (cprim.east) -- (ser);
 \draw[arrow] (ser) -- (csd);
 \draw[arrow] (csd) -- (wav);
 \end{tikzpicture}
@@ -339,99 +308,66 @@ i "sine_osc" 0. 4. 440. 0.65 0.5
 readable and stable as the orchestra grows.
 
 Curves reach the sounding notes through declared bindings: by default an
-\texttt{amplitude} curve multiplies \texttt{p5}. For each affected
-instrument the renderer copies the whole \texttt{instr} body from its source
-\texttt{.orc} into a \emph{bound copy} and rewrites only the use-sites of
-the bound p-fields, so the control-signal globals multiply or replace them
-there; everything else---the \texttt{pcount()} guards, the envelope
-generation, the \texttt{limit()} clamps, the oscillator---is reproduced
-verbatim. The affected notes are re-pointed to this copy, and several curves
-may compose on one p-field: in Fig.~\ref{fig:timeline} two amplitude curves
-and an \texttt{ampScale} curve multiply into \texttt{p5}, while
-\texttt{panSweep} replaces and \texttt{panDepth} multiplies \texttt{p6}. The
-bound copy is regenerated from the current \texttt{.orc} at every render and
-the source orchestra is never edited, so the copy cannot drift from its
-source; the binding relies on the paclet's p-field convention to locate
-those use-sites.
-The serializer writes the globals and the generated instruments into the
-orchestra beside the registry's \texttt{\#include} lines, sorts score
-statements by onset, and can still invoke the Csound binary to compile
-the exported \texttt{.csd} to audio.
+\texttt{amplitude} curve multiplies \texttt{p5}. For each affected instrument
+the renderer copies the whole \texttt{instr} body from its source \texttt{.orc}
+into a \emph{bound copy}, rewriting only the use-sites of the bound
+p-fields---there the control-signal globals multiply or replace them, everything
+else (\texttt{pcount()} guards, envelope generation, \texttt{limit()} clamps,
+the oscillator) reproduced verbatim. Affected notes are re-pointed to this copy,
+and several curves may compose on one p-field: in Fig.~\ref{fig:timeline} two
+amplitude curves and an \texttt{ampScale} curve multiply into \texttt{p5}, while
+\texttt{panSweep} replaces and \texttt{panDepth} multiplies \texttt{p6}.
+Regenerated from the current \texttt{.orc} every render and never edited at the
+source, the copy cannot drift; locating the use-sites relies on the paclet's
+p-field convention. The serializer writes the globals and generated instruments
+beside the registry's \texttt{\#include} lines, sorts score statements by onset,
+and can invoke Csound to compile the \texttt{.csd} to audio.
 
-The same amplitude curve lives very differently outside Csound. Projected to
-the OSC backend it is not bound into an instrument but sampled at the session
-control rate into timed messages: a linear ramp over two seconds at
-$10$~Hz becomes the stream below (actual paclet output, excerpt of
-\texttt{example/paper\_curve\_osc.json}):
-
-{\small\begin{verbatim}
-{ "version": 1, "sampleRate": 44100, "duration_ms": 1900,
-  "events": [
-    { "time_ms":    0, "address": "/param/amplitude", "args": [0.0]  },
-    { "time_ms":  100, "address": "/param/amplitude", "args": [0.05] },
-    { "time_ms":  200, "address": "/param/amplitude", "args": [0.1]  },
-    ...
-    { "time_ms": 1900, "address": "/param/amplitude", "args": [0.95] }]}
-\end{verbatim}}
-
-\noindent
-The beat-space curve and the tempo map are the same as in the Csound
-projection; one binds the curve to a score p-field, the other streams it as
-OSC control messages in milliseconds. It is a genuinely non-Csound
-artifact---the heterogeneity the architecture exists to make cheap.
+The same amplitude curve lives differently outside Csound. Projected to OSC it
+is not bound into an instrument but sampled at the session control rate into
+timed messages. A linear ramp over two seconds at $10$~Hz becomes a JSON event
+list (fields \texttt{version}, \texttt{sampleRate}, \texttt{duration\_ms}, and
+per-sample \texttt{events}), each event an OSC message---\texttt{time\_ms}~1900,
+\texttt{address} \texttt{/param/amplitude}, \texttt{args}~\texttt{[0.95]}
+(actual paclet output, excerpted\footnote{Full example artifacts---the
+aggregated \texttt{.csd} and its \texttt{.wav}, the click track, the OSC JSON,
+the generating notebook, and the \texttt{.orc} instruments---are in the
+supplementary folder: \url{\supplementaryurl}.}). The beat-space curve and tempo
+map are the same as in the Csound projection; one binds the curve to a score
+p-field, the other streams it as OSC messages in milliseconds---a genuinely
+non-Csound artifact, the heterogeneity the architecture exists to make cheap.
 
 \section{A Click Track from the Same Timeline}\label{sec:click}
 
-Click tracks for mixed music are usually rebuilt by hand in a DAW whenever
-the score changes---precisely the divergence this architecture exists to
-remove. The click backend treats rehearsal audio as one more projection: it
-reads only the authored meter entities and the tempo map, builds the
-measure grid, and emits one short \texttt{i}~event per beat, accenting each
-downbeat. Every parameter is session configuration---beat unit ($1/4$),
-click duration ($1/16$), strong/weak frequencies ($1760/1100$~Hz),
-amplitudes ($0.9/0.45$), and pan---and the click instrument itself is an
-ordinary three-line \texttt{.orc} file. Because the renderer walks the same
-meter grid and tempo map as every other backend, meter and tempo changes
-are followed with no additional authoring. The output below is
-actual paclet output for two $4/4$ bars at 120~BPM (downbeats at 0 and
-2~s):
-
-{\small\begin{verbatim}
-<CsScore>
-f 1 0 16384 10 1
-i "click" 0. 0.125 1760. 0.9 0.5
-i "click" 0.5 0.125 1100. 0.45 0.5
-i "click" 1. 0.125 1100. 0.45 0.5
-i "click" 1.5 0.125 1100. 0.45 0.5
-i "click" 2. 0.125 1760. 0.9 0.5
-...
-\end{verbatim}}
-
-\noindent
-The backend reuses \texttt{serializeCSnd} unchanged
-(Fig.~\ref{fig:pipeline}), inheriting \texttt{\#include} handling and
-optional compilation to \texttt{.wav} for distribution to performers.
-Implementing it required no change to Layers I--II. Because the click track
-is itself a Csound-family output, it shows how cheap a further projection
-becomes once the temporal core is shared---here within one serializer
-family; the genuinely different time encodings, notation's divisions and
-OSC's milliseconds, are the province of the MusicXML and OSC contracts.
+Click tracks for mixed music are usually rebuilt by hand in a DAW whenever the
+score changes---precisely the divergence this architecture removes. The click
+backend treats rehearsal audio as one more projection: it reads only the
+authored meter entities and the tempo map, builds the measure grid, and emits
+one short \texttt{i}~event per beat, accenting each downbeat. Every parameter is
+session configuration---beat unit ($1/4$), click duration ($1/16$), strong/weak
+frequencies ($1760/1100$~Hz), amplitudes ($0.9/0.45$), and pan---and the click
+instrument itself is an ordinary three-line \texttt{.orc} file. Because the
+renderer walks the same meter grid and tempo map as every other backend, meter
+and tempo changes are followed with no additional authoring; for two $4/4$ bars
+at 120~BPM it emits strong \texttt{i "click"} downbeats (0 and 2~s) and weak
+intervening beats (full \texttt{.csd} and \texttt{.wav} in the supplementary
+folder). Reusing \texttt{serializeCSnd} unchanged (Fig.~\ref{fig:pipeline}), the
+backend inherits \texttt{\#include} handling and optional \texttt{.wav}
+compilation and needs no change to Layers~I--II---showing how cheaply a further
+projection follows once the temporal core is shared. The genuinely different
+time encodings, notation's divisions and OSC's milliseconds, belong to the
+MusicXML and OSC contracts.
 
 \section{Conclusions}
 
 Temporal System contributes an architecture, not a synthesis method: an
-immutable rational-beat store from which Csound scores, click tracks,
-notation, and real-time event streams are compiled as unequal but
-coordinated projections. Csound currently plays the part of reference
-renderer because it
-makes the contract concrete---late conversion of time, pitch, and dynamics;
-stable named instruments; orchestras kept as Csound code. Current work
-includes stabilizing the MusicXML backend beyond beta and a hierarchical
-generation layer above the store. Sixty years after \emph{Project~1} and
-the Bell Labs note-lists, separating computed time from rendered sound
-still pays: it is what lets one timeline become many renderings.
-
-\clearpage
+immutable rational-beat store from which Csound scores, click tracks, notation,
+and real-time event streams are compiled as unequal but coordinated projections,
+Csound being the reference renderer that makes the contract concrete. Current
+work stabilizes the MusicXML backend beyond beta and adds a hierarchical
+generation layer above the store. Sixty years after \emph{Project~1} and the
+Bell Labs note-lists, separating computed time from rendered sound still
+pays---it lets one timeline become many renderings.
 
 \begin{thebibliography}{99}
 
