@@ -86,12 +86,15 @@ render[tempo_, tag_] := Module[{cs, ck, osc, mx},
   ck  = TemporalSystem`Renderer`renderTo[sd, tempo, TemporalSystem`Click`clickBackend, cfg, registry];
   osc = TemporalSystem`Renderer`renderTo[sd, tempo, TemporalSystem`OSC`oscBackend, cfg, registry];
   mx  = TemporalSystem`Renderer`renderTo[sd, tempo, TemporalSystem`MusicXML`musicXMLBackend, cfg, registry];
-  If[StringQ[cs],  Export["demo_sync_" <> tag <> ".csd", cs, "Text"]];
-  If[StringQ[ck],  Export["demo_sync_click_" <> tag <> ".csd", ck, "Text"]];
-  If[AssociationQ[osc], Export["demo_sync_osc_" <> tag <> ".json", osc, "JSON"]];
-  Which[
-    StringQ[mx],           Export["demo_sync_" <> tag <> ".musicxml", mx, "Text"],
-    MatchQ[mx, _XMLObject], Export["demo_sync_" <> tag <> ".musicxml", mx, "XML"]
+  If[StringQ[cs],  Export[FileNameJoin[{out, "demo_sync_" <> tag <> ".csd"}], cs, "Text"]];
+  If[StringQ[ck],  Export[FileNameJoin[{out, "demo_sync_click_" <> tag <> ".csd"}], ck, "Text"]];
+  If[AssociationQ[osc], Export[FileNameJoin[{out, "demo_sync_osc_" <> tag <> ".json"}], osc, "JSON"]];
+  (* renderTo returns an XMLObject["Document"] (head is NOT plain XMLObject, so
+     no MatchQ gate). Use the paclet's own writer serializeXML[obj, config,
+     path]; Export[...,"XML"] would silently drop the metronome direction. *)
+  If[StringQ[mx],
+    Export[FileNameJoin[{out, "demo_sync_" <> tag <> ".musicxml"}], mx, "Text"],
+    TemporalSystem`MusicXML`serializeXML[mx, cfg, FileNameJoin[{out, "demo_sync_" <> tag <> ".musicxml"}]]
   ];
   Print["[", tag, "] csound=", StringQ[cs], " click=", StringQ[ck],
         " osc=", AssociationQ[osc], " musicxml=", Head[mx]];
@@ -131,17 +134,26 @@ fig = Graphics[{
     Table[Text[Style[l, 9, FontFamily -> "Helvetica"], {-0.35, yFor[l]}, {1, 0}], {l, lanes}],
     Table[Text[Style[labels[[i]], 7, Gray, FontFamily -> "Helvetica"],
       {If[i <= 3, secA[[i]], (secA[[i]] + secB[[i]])/2], 3.5}, {0, -1}], {i, Length[beats]}],
-    Text[Style["tempo edit at beat 2  (90\[Rule]60 BPM)", 7.5, GrayLevel[0.4],
-      FontFamily -> "Helvetica"], {editX + 0.12, 0.2}, {-1, 0}],
+    (* per-segment tempo annotations: 1st segment 120 BPM (unchanged in both
+       versions), 2nd segment 90->60 BPM (the edit) -- matches the two
+       metronome marks in the MusicXML exports *)
+    GrayLevel[0.45], Thickness[0.0018], Dashing[None],
+    Line[{{0.03, 3.82}, {editX - 0.03, 3.82}}],
+    Line[{{0.03, 3.77}, {0.03, 3.82}}], Line[{{editX - 0.03, 3.77}, {editX - 0.03, 3.82}}],
+    Line[{{editX + 0.03, 3.82}, {6.55, 3.82}}],
+    Line[{{editX + 0.03, 3.77}, {editX + 0.03, 3.82}}], Line[{{6.55, 3.77}, {6.55, 3.82}}],
+    Text[Style["120 BPM", 8, GrayLevel[0.3], FontFamily -> "Helvetica"], {editX/2, 4.05}],
+    Text[Style["90 \[Rule] 60 BPM", 8, GrayLevel[0.3], FontFamily -> "Helvetica"], {(editX + 6.55)/2, 4.05}],
+    Text[Style["beat 2 (bar 3)", 6.5, GrayLevel[0.5], FontFamily -> "Helvetica"], {editX + 0.1, 0.2}, {-1, 0}],
     marker[-1.75, 0.2, True], Text[Style["original", 7, FontFamily -> "Helvetica"], {-1.62, 0.2}, {-1, 0}],
     marker[-0.75, 0.2, False], Text[Style["edited", 7, FontFamily -> "Helvetica"], {-0.62, 0.2}, {-1, 0}]
   },
-  PlotRange -> {{-2.0, 7.1}, {-0.15, 3.8}}, AspectRatio -> 0.4, ImageSize -> 380,
+  PlotRange -> {{-2.0, 7.1}, {-0.15, 4.35}}, AspectRatio -> 0.44, ImageSize -> 380,
   Axes -> {True, False}, AxesStyle -> GrayLevel[0.3], Ticks -> {Range[0, 6], None},
   AxesLabel -> {Style["seconds", 8, FontFamily -> "Helvetica"], None}
 ];
-Export["propagation.pdf", fig];
-Export["propagation.png", fig, ImageResolution -> 300];
+Export[FileNameJoin[{out, "propagation.pdf"}], fig];
+Export[FileNameJoin[{out, "propagation.png"}], fig, ImageResolution -> 300];
 
 (* tidy up any stray Csound scratch files a compile step may leave behind *)
 Scan[If[FileExistsQ[#], DeleteFile[#]] &, {"test.aif", "test.pkf"}];

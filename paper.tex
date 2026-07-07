@@ -158,8 +158,8 @@ errors, local to one renderer, and each backend declares a fallback policy
 The paclet also inspects itself: \texttt{drawTimeline} renders any stemData as
 lane-based graphics with the metric grid derived from the authored meter
 entities (Fig.~\ref{fig:timeline}), from a single function call with no external
-tool. Every fixture in the Csound suite renders to a \texttt{.csd} that Csound
-compiles without error, and its rendered audio was auditioned.
+tool. Every fixture in the Csound suite compiles without error and was
+auditioned.
 
 \begin{figure}
 \centering
@@ -335,9 +335,9 @@ downbeat of bar~3 is Csound \texttt{p2}$=4.0$\,s, OSC \texttt{time\_ms}$=4000$,
 and a strong click at $4.0$\,s, while MusicXML places it at bar~3, beat~1.
 Editing the second tempo segment to $60$~BPM moves every later onset by the same
 amount in all three time-domain backends (the note at beat $9/4$: $4.667 \to
-5.0$\,s) while the MusicXML export is byte-identical: notation lives in beat
-space, and seconds are bound only at render time. This four-backend synchrony
-demonstration, before and after the edit, is in the supplementary material.
+5.0$\,s), while in the MusicXML export only the second tempo mark changes ($90
+\to 60$~BPM)---the initial $120$ and every written note-duration unchanged:
+notation lives in beat space, and seconds are bound only at render time.
 
 \section{Conclusions}
 
