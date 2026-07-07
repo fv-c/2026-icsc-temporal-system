@@ -9,6 +9,7 @@
      example/timeline_example_click.csd|wav  its click track (1/8 grid)
      example/paper_click.csd             minimal click quoted in Sect. 5
      example/paper_note.csd              one-note rendering quoted in Sect. 4
+     example/paper_curve_osc.json        OSC ramp quoted in Sect. 4
 
    Run with:  wolframscript -file tools/make_example.wls            *)
 
@@ -29,6 +30,7 @@ Get[FileNameJoin[{repoRoot, "util", "timeline.wl"}]];
 Get[FileNameJoin[{repoRoot, "rendering", "renderer.wl"}]];
 Get[FileNameJoin[{repoRoot, "rendering", "csound.wl"}]];
 Get[FileNameJoin[{repoRoot, "rendering", "click.wl"}]];
+Get[FileNameJoin[{repoRoot, "rendering", "osc.wl"}]];
 
 csoundBinary = SelectFirst[
   {"/usr/local/bin/csound", "/opt/homebrew/bin/csound"}, FileExistsQ, "csound"];
@@ -169,3 +171,18 @@ paperNote = TemporalSystem`Renderer`renderTo[
 If[!StringQ[paperNote], Print["paper note failed"]; Exit[1]];
 Export[FileNameJoin[{exDir, "paper_note.csd"}], paperNote, "Text"];
 Print["written: example/paper_click.csd, example/paper_note.csd"];
+
+(* ============================================================
+   3. OSC projection of a single amplitude curve, quoted in Sect. 4:
+      a linear 0->1 ramp sampled at 10 Hz over two seconds.         *)
+
+oscCfg = TemporalSystem`Session`makeSessionConfig[
+  "sampleRate" -> 44100, "curveSrOSC" -> 10];
+oscTempo = TemporalSystem`TempoMap`makeTempoSpec[{{0, 120.}}];
+oscCurve = TemporalSystem`Entities`makeCurve[
+  "ampRamp", 0, "amplitude", 1, {"linear", {{0, 0.}, {1, 1.}}}];
+oscEvents = TemporalSystem`OSC`renderEntityToOSC[oscCurve, oscTempo, oscCfg];
+oscJson = TemporalSystem`OSC`serializeOSC[oscEvents, oscCfg];
+If[!AssociationQ[oscJson], Print["osc render failed"]; Exit[1]];
+Export[FileNameJoin[{exDir, "paper_curve_osc.json"}], oscJson, "JSON"];
+Print["written: example/paper_curve_osc.json"];

@@ -17,6 +17,8 @@ compose (`p5 * amplitude * ampScale`; `p6` replaced by
 | `timeline_example_click.wav` | Audio of that click track |
 | `paper_note.csd` | One-note rendering whose i-statement is quoted in Sect. 4 of the paper |
 | `paper_click.csd` | Minimal 4/4 click whose score is quoted in Sect. 5 of the paper |
+| `paper_curve_osc.json` | OSC projection of a linear amplitude curve (0→1, sampled at 10 Hz), excerpted in Sect. 4 of the paper |
+| `instruments/` | Bundled copies of the `sine_osc.orc` and `click.orc` instruments that the `.csd` files `#include` |
 
 Headless regeneration (also rewrites `../figures/timeline_export.pdf|png`):
 
@@ -26,3 +28,18 @@ wolframscript -file ../tools/make_example.wls
 
 Requires a local checkout of `temporal-system` (path set at the top of the
 script/notebook) and a Csound binary for the audio steps.
+
+## Compiling the `.csd` files standalone
+
+As generated, each `.csd` references its instruments by absolute `#include`
+path into that local `temporal-system` checkout, e.g.
+
+```
+#include ".../temporal-system/instruments/sine_osc.orc"
+```
+
+The same instrument definitions are bundled here under `instruments/`
+(`sine_osc.orc`, `click.orc`). To compile a `.csd` on a machine without the
+checkout, repoint its `#include` lines at the bundled copies (or pass Csound
+an include directory with `--include-dir`), then run e.g.
+`csound timeline_example.csd`.
